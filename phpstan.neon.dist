@@ -1,0 +1,13 @@
+parameters:
+    level: 8
+    phpVersion: 80100
+    paths:
+        - plugin/financing-bridge
+    scanFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+        - vendor/php-stubs/wp-cli-stubs/wp-cli-stubs.php
+    bootstrapFiles:
+        - tests/phpstan-constants.php
+    ignoreErrors:
+        # WordPress core is not installed where static analysis runs.
+        - identifier: requireOnce.fileNotFound

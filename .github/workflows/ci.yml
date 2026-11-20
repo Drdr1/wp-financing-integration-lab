@@ -1,0 +1,66 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.1", "8.3"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer
+          coverage: none
+      - run: composer install --no-interaction --no-progress
+      - name: lint
+        run: find plugin tests -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+      - run: vendor/bin/phpstan analyse --no-progress
+      - run: vendor/bin/phpunit
+
+  e2e:
+    # Real WordPress + MySQL + the plugin, driven through WP-CLI, the REST
+    # API and signed webhooks, against the mock financing platform.
+    needs: php
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        wordpress: ["6.6", "latest"]
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: wp
+          MYSQL_USER: wp
+          MYSQL_PASSWORD: wp
+          MYSQL_ROOT_PASSWORD: root
+        ports: ["3306:3306"]
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mysqli
+          tools: wp-cli
+          coverage: none
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check tests/e2e && ruff format --check tests/e2e
+      - name: install WordPress ${{ matrix.wordpress }} with the plugin
+        run: WP_VERSION=${{ matrix.wordpress }} DB_HOST=127.0.0.1:3306 ./scripts/setup-wp.sh
+      - run: pytest -q tests/e2e
